@@ -293,9 +293,9 @@ def create_app():
                     title="Chat with Hermes",
                     description="Ask anything - general questions, coding help, or data analysis guidance.",
                     examples=[
-                        "What kinds of data analysis can you help me with?",
-                        "Explain the difference between correlation and causation.",
-                        "Write Python code to generate a sample dataset with pandas.",
+                        ["What kinds of data analysis can you help me with?"],
+                        ["Explain the difference between correlation and causation."],
+                        ["Write Python code to generate a sample dataset with pandas."],
                     ],
                 )
 
