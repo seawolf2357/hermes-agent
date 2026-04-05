@@ -2,11 +2,12 @@
 Hermes Agent - Data Analysis Demo for Hugging Face Spaces.
 
 Provides a Gradio web UI with:
-1. AI Chat tab - converse with an LLM via OpenAI-compatible API
+1. AI Chat tab - converse with Kimi K2.5 via Fireworks AI
 2. Data Analysis tab - upload CSV/JSON, ask questions, get charts & stats
 """
 
 import io
+import json
 import os
 import re
 import uuid
@@ -18,14 +19,14 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import plotly.express as px
-from openai import OpenAI
+import requests as http_requests
 
 # ---------------------------------------------------------------------------
-# Configuration
+# Configuration - Fireworks AI with Kimi K2.5
 # ---------------------------------------------------------------------------
-API_KEY = os.getenv("OPENAI_API_KEY", "")
-BASE_URL = os.getenv("OPENAI_BASE_URL", "https://openrouter.ai/api/v1")
-MODEL = os.getenv("OPENAI_MODEL", "anthropic/claude-sonnet-4")
+FIREWORKS_API_KEY = os.getenv("FIREWORKS_API_KEY", "")
+FIREWORKS_URL = "https://api.fireworks.ai/inference/v1/chat/completions"
+MODEL = os.getenv("FIREWORKS_MODEL", "accounts/fireworks/models/kimi-k2p5")
 
 SYSTEM_PROMPT = """You are Hermes, an expert data analyst AI assistant built by Nous Research.
 You help users analyze data, create visualizations, and extract insights.
@@ -63,37 +64,59 @@ Respond with:
    - Uses plt.close() after saving"""
 
 
-def get_client() -> OpenAI:
-    """Create an OpenAI client with current settings."""
-    return OpenAI(api_key=API_KEY, base_url=BASE_URL)
+def fireworks_chat(messages: list[dict], stream: bool = False):
+    """Call Fireworks AI API with the given messages."""
+    headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {FIREWORKS_API_KEY}",
+    }
+    payload = {
+        "model": MODEL,
+        "max_tokens": 4096,
+        "top_p": 1,
+        "top_k": 40,
+        "presence_penalty": 0,
+        "frequency_penalty": 0,
+        "temperature": 0.6,
+        "messages": messages,
+        "stream": stream,
+    }
+    return http_requests.post(
+        FIREWORKS_URL,
+        headers=headers,
+        json=payload,
+        stream=stream,
+        timeout=120,
+    )
 
 
 # ---------------------------------------------------------------------------
 # Chat Tab
 # ---------------------------------------------------------------------------
 def chat_respond(message: str, history: list[dict], session_id: str):
-    """Stream a chat response from the LLM."""
-    if not API_KEY:
-        yield "Please set the `OPENAI_API_KEY` environment variable in your Space settings."
+    """Stream a chat response from Fireworks AI (Kimi K2.5)."""
+    if not FIREWORKS_API_KEY:
+        yield "Please set the `FIREWORKS_API_KEY` environment variable in your Space settings."
         return
 
-    client = get_client()
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     for entry in history:
         messages.append({"role": entry["role"], "content": entry["content"]})
     messages.append({"role": "user", "content": message})
 
     try:
-        stream = client.chat.completions.create(
-            model=MODEL,
-            messages=messages,
-            stream=True,
-            max_tokens=4096,
-            extra_headers={"X-Hermes-Session-Id": session_id},
-        )
+        resp = fireworks_chat(messages, stream=True)
+        resp.raise_for_status()
         partial = ""
-        for chunk in stream:
-            delta = chunk.choices[0].delta.content
+        for line in resp.iter_lines(decode_unicode=True):
+            if not line or not line.startswith("data: "):
+                continue
+            data = line[6:]
+            if data.strip() == "[DONE]":
+                break
+            chunk = json.loads(data)
+            delta = chunk.get("choices", [{}])[0].get("delta", {}).get("content", "")
             if delta:
                 partial += delta
                 yield partial
@@ -171,8 +194,8 @@ def analyze_data(
     file, question: str, history: list[dict]
 ) -> tuple[list[dict], str, str | None, str]:
     """Main analysis pipeline: upload data, ask question, get results."""
-    if not API_KEY:
-        msg = "Please set the `OPENAI_API_KEY` environment variable."
+    if not FIREWORKS_API_KEY:
+        msg = "Please set the `FIREWORKS_API_KEY` environment variable."
         return history + [{"role": "assistant", "content": msg}], "", None, ""
 
     df, summary_md = load_data(file)
@@ -206,19 +229,16 @@ def analyze_data(
         question=question,
     )
 
-    client = get_client()
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     for entry in history:
         messages.append({"role": entry["role"], "content": entry["content"]})
     messages.append({"role": "user", "content": prompt})
 
     try:
-        response = client.chat.completions.create(
-            model=MODEL,
-            messages=messages,
-            max_tokens=4096,
-        )
-        answer = response.choices[0].message.content or ""
+        resp = fireworks_chat(messages, stream=False)
+        resp.raise_for_status()
+        result = resp.json()
+        answer = result["choices"][0]["message"]["content"] or ""
     except Exception as e:
         answer = f"API Error: {e}"
         return (
@@ -373,9 +393,8 @@ Set these environment variables in your Space settings:
 
 | Variable | Description |
 |----------|-------------|
-| `OPENAI_API_KEY` | Your API key |
-| `OPENAI_BASE_URL` | API endpoint (default: OpenRouter) |
-| `OPENAI_MODEL` | Model name (default: anthropic/claude-sonnet-4) |
+| `FIREWORKS_API_KEY` | Your Fireworks AI API key |
+| `FIREWORKS_MODEL` | Model name (default: accounts/fireworks/models/kimi-k2p5) |
 
 ### Links
 - [GitHub Repository](https://github.com/NousResearch/hermes-agent)

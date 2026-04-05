@@ -27,6 +27,5 @@ Set the following environment variables in your Space settings:
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `OPENAI_API_KEY` | API key for the LLM provider | (required) |
-| `OPENAI_BASE_URL` | Base URL for the API endpoint | `https://openrouter.ai/api/v1` |
-| `OPENAI_MODEL` | Model to use | `anthropic/claude-sonnet-4` |
+| `FIREWORKS_API_KEY` | Fireworks AI API key | (required) |
+| `FIREWORKS_MODEL` | Model to use | `accounts/fireworks/models/kimi-k2p5` |
