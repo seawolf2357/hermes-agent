@@ -1,0 +1,5 @@
+gradio>=5.0,<6
+openai>=2.21.0,<3
+pandas>=2.0,<3
+matplotlib>=3.7,<4
+plotly>=5.18,<6
